@@ -1,0 +1,123 @@
+#Command to execute this playbook: ansible-playbook deploy.yml -i inventory
+---
+- name: Provision EC2 instances
+  hosts: localhost
+  vars_files:
+    - ./var.yml
+  gather_facts: False
+
+  tasks:
+    - name: Create a new EC2 key pair
+      ec2_key:
+        name: "{{ key_name }}"
+        region: "{{ region_name }}"
+      register: ec2_key
+
+    - name: Save private key
+      copy: content="{{ ec2_key.key.private_key }}" dest="./secret/{{ key_name }}.pem" mode=0600
+      when: ec2_key.changed
+
+    - name: Obtain default VPC information from AWS
+      ec2_vpc_net_facts:
+        filters:
+          "isDefault": "true"
+      register: default_vpc
+
+    - name: Obtain subnets for default VPC
+      ec2_vpc_subnet_facts:
+        filters:
+          vpc-id: "{{ default_vpc['vpcs'][0]['vpc_id'] }}"
+      register: subnet_info
+
+    - set_fact:
+        vpc_id: "{{ default_vpc['vpcs'][0]['vpc_id'] }}"
+        random_subnet: "{{ subnet_info.subnets|map(attribute='id')|list|random }}"
+
+    - name: Create EC2 VPC security group 
+      ec2_group:
+        name: "{{ instance_name }}"
+        description: Security Group for {{ instance_name }}
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ region_name }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+              - 80
+              - 8080
+            cidr_ip: 0.0.0.0/0
+            rule_desc: "Allow SSH, HTTP 80 Nginx and 8080 TomCat9 "
+      register: security_group
+
+    - name: Create EC2 instances
+      ec2:
+        key_name: "{{ key_name }}"
+        region: "{{ region_name }}"
+        instance_type: "{{ instance_type }}"
+        image: "{{ ami_id }}"
+        vpc_subnet_id: "{{ random_subnet }}"
+        group: "{{ instance_name }}"
+        wait: yes
+        instance_tags:
+          Name: "{{ instance_name }}"
+        count_tag:
+          Name: "{{ instance_name }}"
+        exact_count: 1
+        assign_public_ip: yes
+      register: ec2
+
+    - debug:
+        var: ec2.results
+
+    - name: Add new instance to host group
+      add_host:
+        name: "{{ ec2.results.instances.public_ip }}"
+        groups: "{{ ec2.results.instances.tags.Name }}"
+        ansible_ssh_private_key_file: ./secret/{{ key_name }}.pem
+
+- name: Install jdk, mc, nginx, tomcat9
+  hosts: "{{ ec2.results.instances.tags.Name }}"
+  remote_user: ubuntu
+  become: yes
+
+  tasks:
+    - name: Ensure default JDK package is present
+      apt:
+       name: default-jdk
+       state: present
+       update_cache: yes
+
+    - name: Ensure MC package is present
+      apt:
+       name: mc
+       state: present
+
+    - name: Ensure NGINX package is present
+      apt:
+       name: nginx
+       state: present
+
+    - name: Ensure TOMCAT package is present
+      apt:
+       name: tomcat9
+       state: present
+
+    - name: Ensure NGINX service started
+      service:
+       name: nginx.service
+       state: started
+
+    - name: Ensure TOMCAT service started
+      service:
+       name: tomcat9.service
+       state: started
+
+    - name: Copy the HTML file from the local to VM
+      copy:
+        src: ./index.html
+        dest: /var/www/html
+
+    - name: Copy the WAR file from the local to VM
+      copy:
+        src: ./Puzzle15.war
+        dest: /var/lib/tomcat9/webapps

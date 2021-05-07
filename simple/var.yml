@@ -1,0 +1,6 @@
+---
+key_name: dz-devops13
+region_name: eu-central-1
+instance_name: dz-devops13
+ami_id: ami-05f7491af5eef733a
+instance_type: t2.micro
