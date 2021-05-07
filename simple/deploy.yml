@@ -79,7 +79,6 @@
   vars_files:
     - ./var.yml
   hosts: "{{ instance_name }}"
-  private_key_file: "./secret/{{ key_name }}.pem"
   remote_user: ubuntu
   become: yes
 
