@@ -64,7 +64,7 @@
           Name: "{{ instance_name }}"
         exact_count: 1
         assign_public_ip: yes
-      register: ec2
+      register: ec2.results
 
     - debug:
         var: ec2.results
