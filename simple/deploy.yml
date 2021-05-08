@@ -91,6 +91,10 @@
   become: yes
 
   tasks:
+    - name: Ensure APT UPDATE
+      apt:
+       update_cache: yes
+
     - name: Ensure default JDK package is present
       apt:
        name: default-jdk
