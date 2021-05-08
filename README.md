@@ -5,4 +5,4 @@
   pip3 install botocore
   pip3 install boto3
 
-  Run ansible-playbook deploy.yml -i inventory
+  Run ansible-playbook deploy.yml
